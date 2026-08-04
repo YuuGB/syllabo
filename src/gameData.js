@@ -25,6 +25,16 @@ export function buildDeck() {
   return deck
 }
 
+// Chaque joueur démarre avec les 26 lettres de l'alphabet, une seule fois chacune.
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+
+export function buildAlphabetHand() {
+  return ALPHABET.map((letter) => ({
+    id: `l${letter}${Math.random().toString(36).slice(2, 6)}`,
+    syllable: letter,
+  }))
+}
+
 // --- Normalisation (on ignore les accents pour la comparaison, pas pour l'affichage) ---
 export function normalize(str) {
   return str
