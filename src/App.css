@@ -116,11 +116,13 @@ body {
 /* --- Écran de jeu --- */
 
 .game-screen {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   padding: 12px;
-  gap: 12px;
+  gap: 10px;
+  overflow: hidden;
 }
 
 .flash {
@@ -164,21 +166,25 @@ body {
   font-weight: 700;
 }
 
-.close-btn {
-  width: 100%;
-  margin-top: 4px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--coral);
-  background: transparent;
-  color: var(--coral);
-  font-family: var(--font-body);
-  font-size: 0.75rem;
-  cursor: pointer;
+.action-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--ink-light);
+  border-radius: 10px;
+  padding: 10px;
+}
+.action-bar .hint { margin: 0; }
+.action-bar .btn { max-width: none; }
+
+.btn-close {
+  background: var(--coral);
+  border-color: var(--coral);
+  color: white;
+  font-weight: 700;
 }
 
 .pass-btn {
-  max-width: none;
   background: transparent;
   border-color: var(--parchment-dim);
   opacity: 0.7;
@@ -198,9 +204,10 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
-  gap: 10px;
+  gap: 8px;
   overflow-y: auto;
   padding: 4px 0;
+  min-height: 0;
 }
 
 .hint {
@@ -214,14 +221,17 @@ body {
   background: var(--ink-light);
   border: 2px solid transparent;
   border-radius: 10px;
-  padding: 10px 12px;
-  min-width: 120px;
+  padding: 8px 10px;
+  min-width: 90px;
+  cursor: pointer;
 }
 .word-card.targetable {
   border-color: var(--mustard);
-  cursor: pointer;
 }
-.word-card.closed { opacity: 0.6; }
+.word-card.selected-word {
+  border-color: var(--coral);
+}
+.word-card.closed { opacity: 0.6; cursor: default; }
 .word-card.valid { border-color: var(--teal); opacity: 0.85; }
 
 .word-syllables {
@@ -273,14 +283,16 @@ body {
 }
 
 .hand {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 8px 4px 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+  gap: 6px;
+  padding: 10px 4px 16px;
   border-top: 2px solid var(--ink-light);
+  max-height: 30vh;
+  overflow-y: auto;
+  flex-shrink: 0;
 }
 .card {
-  flex: 0 0 auto;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.1rem;
@@ -288,10 +300,11 @@ body {
   color: var(--ink);
   border: none;
   border-radius: 8px;
-  padding: 14px 16px;
+  padding: 12px 6px;
   box-shadow: 0 3px 0 var(--parchment-dim);
   cursor: pointer;
 }
+.card:disabled { opacity: 0.5; cursor: default; }
 .card.selected {
   background: var(--mustard);
   transform: translateY(-4px);
