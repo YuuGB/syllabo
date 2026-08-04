@@ -1,24 +1,12 @@
-// --- Deck de syllabes (poids = nombre d'exemplaires dans la pioche) ---
-// Syllabes courtes et courantes en plus grand nombre, sons/finales plus rares en moins d'exemplaires.
+// --- Deck de lettres (poids = nombre d'exemplaires dans la pioche) ---
+// Distribution inspirée du Scrabble français : voyelles et lettres
+// fréquentes en grand nombre, lettres rares en un seul exemplaire.
 export const SYLLABLE_WEIGHTS = [
-  ['BA', 6], ['BE', 6], ['BI', 5], ['BO', 5], ['BU', 4],
-  ['CA', 6], ['CE', 6], ['CHA', 5], ['CHE', 5], ['CI', 5], ['CO', 6], ['CU', 4],
-  ['DA', 6], ['DE', 7], ['DI', 5], ['DO', 5], ['DU', 4],
-  ['FA', 5], ['FE', 5], ['FI', 5], ['FO', 4], ['GA', 4], ['GE', 4],
-  ['HI', 3], ['JA', 4], ['JE', 4], ['JO', 3],
-  ['LA', 7], ['LE', 7], ['LI', 6], ['LO', 5], ['LU', 4],
-  ['MA', 6], ['ME', 6], ['MI', 6], ['MO', 5], ['MU', 4],
-  ['NA', 5], ['NE', 6], ['NI', 5], ['NO', 5], ['NU', 3],
-  ['PA', 6], ['PE', 6], ['PI', 5], ['PO', 5], ['PU', 3],
-  ['RA', 6], ['RE', 8], ['RI', 6], ['RO', 5], ['RU', 3],
-  ['SA', 6], ['SE', 6], ['SI', 6], ['SO', 5], ['SU', 4],
-  ['TA', 6], ['TE', 6], ['TI', 6], ['TO', 5], ['TU', 4],
-  ['VA', 5], ['VE', 5], ['VI', 5], ['VO', 4],
-  ['BLE', 3], ['BRE', 3], ['CLE', 3], ['CRE', 2], ['DRE', 3],
-  ['FRE', 2], ['GRE', 2], ['PLE', 2], ['PRE', 3], ['TRE', 3],
-  ['TION', 4], ['MENT', 4], ['ISME', 2], ['ETTE', 3], ['ELLE', 3],
-  ['IQUE', 3], ['ABLE', 2], ['IBLE', 2], ['ANT', 4], ['ENT', 4],
-  ['OIR', 3], ['AGE', 3], ['URE', 3], ['EUR', 4], ['TÉ', 3],
+  ['E', 15], ['A', 9], ['I', 8], ['O', 6], ['U', 6],
+  ['N', 6], ['R', 6], ['S', 6], ['T', 6], ['L', 5],
+  ['D', 3], ['M', 3], ['C', 3],
+  ['G', 2], ['B', 2], ['P', 2], ['F', 2], ['H', 2], ['V', 2],
+  ['J', 1], ['Q', 1], ['K', 1], ['W', 1], ['X', 1], ['Y', 1], ['Z', 1],
 ]
 
 export function buildDeck() {
