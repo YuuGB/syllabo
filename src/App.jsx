@@ -3,9 +3,8 @@ import { db } from './firebase'
 import {
   ref, push, set, update, onValue, runTransaction,
 } from 'firebase/database'
-import { buildDeck, loadTrie, normalize } from './gameData'
+import { buildAlphabetHand, loadTrie, normalize } from './gameData'
 
-const HAND_SIZE = 14
 
 function randomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -93,10 +92,9 @@ export default function App() {
   async function startGame() {
     const playerIds = Object.keys(room.players || {})
     if (playerIds.length < 2) return showFlash('error', 'Il faut au moins 2 joueurs')
-    const deck = buildDeck()
     const updates = { status: 'playing', turnOrder: shuffle(playerIds), turnIndex: 0 }
-    playerIds.forEach((pid, i) => {
-      updates[`players/${pid}/hand`] = deck.slice(i * HAND_SIZE, (i + 1) * HAND_SIZE)
+    playerIds.forEach((pid) => {
+      updates[`players/${pid}/hand`] = buildAlphabetHand()
     })
     await update(ref(db, `rooms/${roomCode}`), updates)
   }
