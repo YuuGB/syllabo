@@ -5,7 +5,7 @@ import {
 } from 'firebase/database'
 import { buildDeck, loadTrie, normalize } from './gameData'
 
-const HAND_SIZE = 10
+const HAND_SIZE = 14
 const WORD_TIMEOUT_MS = 30000
 
 function randomCode() {
