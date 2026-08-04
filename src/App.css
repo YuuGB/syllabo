@@ -150,6 +150,40 @@ body {
 }
 .score-chip.me { background: var(--mustard); color: var(--ink); font-weight: 700; }
 
+.turn-banner {
+  text-align: center;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--ink-light);
+  color: var(--parchment-dim);
+  font-size: 0.9rem;
+}
+.turn-banner.my-turn {
+  background: var(--mustard);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.close-btn {
+  width: 100%;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--coral);
+  background: transparent;
+  color: var(--coral);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.pass-btn {
+  max-width: none;
+  background: transparent;
+  border-color: var(--parchment-dim);
+  opacity: 0.7;
+}
+
 .game-over {
   background: var(--teal);
   color: white;
