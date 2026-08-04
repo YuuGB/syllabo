@@ -41,6 +41,7 @@ export default function App() {
   const [roomCode, setRoomCode] = useState('')
   const [room, setRoom] = useState(null)
   const [selectedCardId, setSelectedCardId] = useState(null)
+  const [selectedWordId, setSelectedWordId] = useState(null)
   const [flash, setFlash] = useState(null) // { type: 'error'|'ok', text }
 
   const playerId = useMemo(getOrCreatePlayerId, [])
@@ -173,13 +174,25 @@ export default function App() {
       if (!cur || cur.closed) return cur
       return { ...cur, closed: true }
     })
+    setSelectedWordId(null)
     if (!result.committed) return
     await advanceTurn()
   }
 
   async function passTurn() {
     if (!isMyTurn()) return
+    setSelectedCardId(null)
+    setSelectedWordId(null)
     await advanceTurn()
+  }
+
+  function handleWordClick(wordId, canPlaceHere, isClosed, myTurn) {
+    if (canPlaceHere) {
+      playCard(wordId)
+      return
+    }
+    if (!myTurn || isClosed) return
+    setSelectedWordId((cur) => (cur === wordId ? null : wordId))
   }
 
   async function removeCardFromHand(cardId) {
@@ -282,37 +295,40 @@ export default function App() {
         {table.map(([wordId, w]) => {
           const wordStr = w.letters.map((l) => l.syllable).join('')
           const isValidWord = w.closed && trie.isWord(normalize(wordStr))
-          const canPlaceHere = !w.closed && myTurn && selectedCardId
+          const canPlaceHere = !w.closed && myTurn && !!selectedCardId
+          const isSelected = selectedWordId === wordId
           return (
             <div
               key={wordId}
-              className={`word-card ${w.closed ? 'closed' : ''} ${isValidWord ? 'valid' : ''} ${canPlaceHere ? 'targetable' : ''}`}
-              onClick={() => canPlaceHere && playCard(wordId)}
+              className={`word-card ${w.closed ? 'closed' : ''} ${isValidWord ? 'valid' : ''} ${canPlaceHere ? 'targetable' : ''} ${isSelected ? 'selected-word' : ''}`}
+              onClick={() => handleWordClick(wordId, canPlaceHere, w.closed, myTurn)}
             >
               <div className="word-syllables">
                 {w.letters.map((l, i) => <span key={i} className="syl">{l.syllable}</span>)}
               </div>
-              {w.closed
-                ? <div className="word-status">{isValidWord ? '✓ mot valide (x2)' : 'clos'}</div>
-                : myTurn && (
-                  <button className="close-btn" onClick={(e) => { e.stopPropagation(); closeWord(wordId) }}>
-                    Clore ce mot
-                  </button>
-                )}
+              {w.closed && <div className="word-status">{isValidWord ? '✓ mot valide (x2)' : 'clos'}</div>}
             </div>
           )
         })}
       </div>
 
-      <div
-        className={`new-word-drop ${myTurn && selectedCardId ? 'active' : ''}`}
-        onClick={() => myTurn && selectedCardId && playCard(null)}
-      >
-        {selectedCardId ? 'Poser ici pour démarrer un nouveau mot' : 'Sélectionne une carte ci-dessous'}
-      </div>
-
       {myTurn && !gameOver && (
-        <button className="btn pass-btn" onClick={passTurn}>Passer mon tour</button>
+        <div className="action-bar">
+          {selectedCardId && (
+            <button className="btn btn-primary" onClick={() => playCard(null)}>
+              Démarrer un nouveau mot
+            </button>
+          )}
+          {selectedWordId && !selectedCardId && (
+            <button className="btn btn-close" onClick={() => closeWord(selectedWordId)}>
+              Clore « {room.table[selectedWordId].letters.map((l) => l.syllable).join('')} »
+            </button>
+          )}
+          {!selectedCardId && !selectedWordId && (
+            <p className="hint">Sélectionne une carte pour jouer, ou un mot pour le clore</p>
+          )}
+          <button className="btn pass-btn" onClick={passTurn}>Passer mon tour</button>
+        </div>
       )}
 
       <div className="hand">
@@ -320,7 +336,7 @@ export default function App() {
           <button
             key={c.id}
             className={`card ${selectedCardId === c.id ? 'selected' : ''}`}
-            onClick={() => myTurn && setSelectedCardId(selectedCardId === c.id ? null : c.id)}
+            onClick={() => myTurn && (setSelectedWordId(null), setSelectedCardId(selectedCardId === c.id ? null : c.id))}
             disabled={!myTurn}
           >
             {c.syllable}
