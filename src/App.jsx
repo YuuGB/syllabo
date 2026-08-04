@@ -1,12 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { db } from './firebase'
 import {
-  ref, push, set, update, onValue, runTransaction, serverTimestamp,
+  ref, push, set, update, onValue, runTransaction,
 } from 'firebase/database'
 import { buildDeck, loadTrie, normalize } from './gameData'
 
 const HAND_SIZE = 14
-const WORD_TIMEOUT_MS = 30000
 
 function randomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -24,6 +23,15 @@ function getOrCreatePlayerId() {
   return id
 }
 
+function shuffle(arr) {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
 export default function App() {
   const [trie, setTrie] = useState(null)
   const [loadingMsg, setLoadingMsg] = useState('Chargement du dictionnaire…')
@@ -34,18 +42,11 @@ export default function App() {
   const [room, setRoom] = useState(null)
   const [selectedCardId, setSelectedCardId] = useState(null)
   const [flash, setFlash] = useState(null) // { type: 'error'|'ok', text }
-  const [, forceTick] = useState(0)
 
   const playerId = useMemo(getOrCreatePlayerId, [])
 
   useEffect(() => {
     loadTrie(setLoadingMsg).then(setTrie)
-  }, [])
-
-  // Tick pour rafraîchir les barres de timer chaque seconde
-  useEffect(() => {
-    const t = setInterval(() => forceTick((n) => n + 1), 1000)
-    return () => clearInterval(t)
   }, [])
 
   // Abonnement à la room
@@ -59,21 +60,6 @@ export default function App() {
     })
     return () => unsub()
   }, [roomCode])
-
-  // Fermeture automatique des mots dont le timer est écoulé (n'importe quel client peut le déclencher)
-  useEffect(() => {
-    if (!room || room.status !== 'playing') return
-    const table = room.table || {}
-    Object.entries(table).forEach(([wordId, w]) => {
-      if (!w.closed && Date.now() - w.lastMoveTs > WORD_TIMEOUT_MS) {
-        const wordRef = ref(db, `rooms/${roomCode}/table/${wordId}`)
-        runTransaction(wordRef, (cur) => {
-          if (!cur || cur.closed) return cur
-          return { ...cur, closed: true }
-        })
-      }
-    })
-  }, [room, roomCode])
 
   function showFlash(type, text) {
     setFlash({ type, text })
@@ -107,15 +93,26 @@ export default function App() {
     const playerIds = Object.keys(room.players || {})
     if (playerIds.length < 2) return showFlash('error', 'Il faut au moins 2 joueurs')
     const deck = buildDeck()
-    const updates = { status: 'playing' }
+    const updates = { status: 'playing', turnOrder: shuffle(playerIds), turnIndex: 0 }
     playerIds.forEach((pid, i) => {
       updates[`players/${pid}/hand`] = deck.slice(i * HAND_SIZE, (i + 1) * HAND_SIZE)
     })
     await update(ref(db, `rooms/${roomCode}`), updates)
   }
 
+  function isMyTurn() {
+    return room?.turnOrder?.[room.turnIndex] === playerId
+  }
+
+  async function advanceTurn() {
+    const turnIndexRef = ref(db, `rooms/${roomCode}/turnIndex`)
+    const len = room.turnOrder.length
+    await runTransaction(turnIndexRef, (cur) => ((cur ?? 0) + 1) % len)
+  }
+
   // Tente de poser la carte sélectionnée sur un mot existant (wordId) ou d'en démarrer un nouveau (wordId = null)
   async function playCard(wordId) {
+    if (!isMyTurn()) return showFlash('error', "Ce n'est pas ton tour")
     if (!selectedCardId || !room) return
     const me = room.players[playerId]
     const card = (me.hand || []).find((c) => c.id === selectedCardId)
@@ -130,22 +127,17 @@ export default function App() {
       const newWordRef = push(ref(db, `rooms/${roomCode}/table`))
       await set(newWordRef, {
         letters: [{ syllable: card.syllable, playerId, playerName: me.name }],
-        lastPlayerId: playerId,
-        lastMoveTs: Date.now(),
         closed: false,
       })
       await removeCardFromHand(card.id)
       setSelectedCardId(null)
+      await advanceTurn()
       return
     }
 
     const word = room.table[wordId]
-    if (word.closed || Date.now() - word.lastMoveTs > WORD_TIMEOUT_MS) {
+    if (word.closed) {
       showFlash('error', 'Ce mot est déjà clos')
-      return
-    }
-    if (word.lastPlayerId === playerId) {
-      showFlash('error', 'Attends qu\u2019un autre joueur contribue avant de rejouer ici')
       return
     }
     const current = word.letters.map((l) => l.syllable).join('')
@@ -158,24 +150,36 @@ export default function App() {
     const wordRef = ref(db, `rooms/${roomCode}/table/${wordId}`)
     const result = await runTransaction(wordRef, (cur) => {
       if (!cur || cur.closed) return cur
-      if (Date.now() - cur.lastMoveTs > WORD_TIMEOUT_MS) return cur
-      if (cur.lastPlayerId === playerId) return cur // abort silencieux (contrôlé aussi côté serveur)
       return {
         ...cur,
         letters: [...cur.letters, { syllable: card.syllable, playerId, playerName: me.name }],
-        lastPlayerId: playerId,
-        lastMoveTs: Date.now(),
       }
     })
 
-    if (!result.committed || result.snapshot.val()?.lastPlayerId !== playerId ||
-        result.snapshot.val()?.letters.length !== word.letters.length + 1) {
-      showFlash('error', 'Coup refusé (quelqu\u2019un vous a devancé ou double-pose interdite)')
+    if (!result.committed || result.snapshot.val()?.letters.length !== word.letters.length + 1) {
+      showFlash('error', 'Coup refusé (le mot vient peut-être d\u2019être clos)')
       return
     }
 
     await removeCardFromHand(card.id)
     setSelectedCardId(null)
+    await advanceTurn()
+  }
+
+  async function closeWord(wordId) {
+    if (!isMyTurn()) return showFlash('error', "Ce n'est pas ton tour")
+    const wordRef = ref(db, `rooms/${roomCode}/table/${wordId}`)
+    const result = await runTransaction(wordRef, (cur) => {
+      if (!cur || cur.closed) return cur
+      return { ...cur, closed: true }
+    })
+    if (!result.committed) return
+    await advanceTurn()
+  }
+
+  async function passTurn() {
+    if (!isMyTurn()) return
+    await advanceTurn()
   }
 
   async function removeCardFromHand(cardId) {
@@ -193,7 +197,7 @@ export default function App() {
     return (
       <div className="center-screen">
         <h1 className="logo">Syllabo</h1>
-        <p className="tagline">Construisez des mots à plusieurs, syllabe par syllabe.</p>
+        <p className="tagline">Construisez des mots à plusieurs, lettre par lettre.</p>
         <input
           className="input" placeholder="Ton prénom" value={name}
           onChange={(e) => setName(e.target.value)}
@@ -234,8 +238,10 @@ export default function App() {
   // screen === 'game'
   const me = room.players[playerId] || { hand: [], name }
   const table = Object.entries(room.table || {})
-  const openWords = table.filter(([, w]) => !w.closed && Date.now() - w.lastMoveTs <= WORD_TIMEOUT_MS)
-  const closedWords = table.filter(([, w]) => w.closed || Date.now() - w.lastMoveTs > WORD_TIMEOUT_MS)
+  const openWords = table.filter(([, w]) => !w.closed)
+  const closedWords = table.filter(([, w]) => w.closed)
+  const myTurn = isMyTurn()
+  const currentPlayerName = room.players?.[room.turnOrder?.[room.turnIndex]]?.name || '…'
 
   const scores = {}
   Object.entries(room.players || {}).forEach(([id, p]) => { scores[id] = { name: p.name, score: 0 } })
@@ -263,47 +269,59 @@ export default function App() {
         ))}
       </div>
 
+      {!gameOver && (
+        <div className={`turn-banner ${myTurn ? 'my-turn' : ''}`}>
+          {myTurn ? 'C\u2019est ton tour !' : `Tour de ${currentPlayerName}`}
+        </div>
+      )}
+
       {gameOver && <div className="game-over">Partie terminée — voir le classement ci-dessus 🎉</div>}
 
       <div className="table-area">
         {table.length === 0 && <p className="hint">Aucun mot en cours. Pose une carte pour en démarrer un !</p>}
         {table.map(([wordId, w]) => {
           const wordStr = w.letters.map((l) => l.syllable).join('')
-          const isClosed = w.closed || Date.now() - w.lastMoveTs > WORD_TIMEOUT_MS
-          const isValidWord = isClosed && trie.isWord(normalize(wordStr))
-          const remaining = Math.max(0, WORD_TIMEOUT_MS - (Date.now() - w.lastMoveTs))
-          const canPlaceHere = !isClosed && selectedCardId && w.lastPlayerId !== playerId
+          const isValidWord = w.closed && trie.isWord(normalize(wordStr))
+          const canPlaceHere = !w.closed && myTurn && selectedCardId
           return (
             <div
               key={wordId}
-              className={`word-card ${isClosed ? 'closed' : ''} ${isValidWord ? 'valid' : ''} ${canPlaceHere ? 'targetable' : ''}`}
+              className={`word-card ${w.closed ? 'closed' : ''} ${isValidWord ? 'valid' : ''} ${canPlaceHere ? 'targetable' : ''}`}
               onClick={() => canPlaceHere && playCard(wordId)}
             >
               <div className="word-syllables">
                 {w.letters.map((l, i) => <span key={i} className="syl">{l.syllable}</span>)}
               </div>
-              {!isClosed && (
-                <div className="timer-bar"><div className="timer-fill" style={{ width: `${(remaining / WORD_TIMEOUT_MS) * 100}%` }} /></div>
-              )}
-              {isClosed && <div className="word-status">{isValidWord ? '✓ mot valide (x2)' : 'clos'}</div>}
+              {w.closed
+                ? <div className="word-status">{isValidWord ? '✓ mot valide (x2)' : 'clos'}</div>
+                : myTurn && (
+                  <button className="close-btn" onClick={(e) => { e.stopPropagation(); closeWord(wordId) }}>
+                    Clore ce mot
+                  </button>
+                )}
             </div>
           )
         })}
       </div>
 
       <div
-        className={`new-word-drop ${selectedCardId ? 'active' : ''}`}
-        onClick={() => selectedCardId && playCard(null)}
+        className={`new-word-drop ${myTurn && selectedCardId ? 'active' : ''}`}
+        onClick={() => myTurn && selectedCardId && playCard(null)}
       >
         {selectedCardId ? 'Poser ici pour démarrer un nouveau mot' : 'Sélectionne une carte ci-dessous'}
       </div>
+
+      {myTurn && !gameOver && (
+        <button className="btn pass-btn" onClick={passTurn}>Passer mon tour</button>
+      )}
 
       <div className="hand">
         {(me.hand || []).map((c) => (
           <button
             key={c.id}
             className={`card ${selectedCardId === c.id ? 'selected' : ''}`}
-            onClick={() => setSelectedCardId(selectedCardId === c.id ? null : c.id)}
+            onClick={() => myTurn && setSelectedCardId(selectedCardId === c.id ? null : c.id)}
+            disabled={!myTurn}
           >
             {c.syllable}
           </button>
